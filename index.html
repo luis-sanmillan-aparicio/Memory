@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Memory de números</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
+<style>
+:root{--felt:#1d5a42;--felt-2:#144432;--ink:#1c1a17;--ivory:#f7f2e4;--back:#7b1e2c;--back-2:#5e1421;--gold:#e8c872;--match:#cfe8c4;--shadow:rgba(0,0,0,.4);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--felt:#14402f;--felt-2:#0d2b20;--match:#b9d6ae}}
+:root[data-theme="dark"]{--felt:#14402f;--felt-2:#0d2b20;--match:#b9d6ae}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;height:100%;background:radial-gradient(ellipse at 50% 30%,var(--felt),var(--felt-2));background-color:var(--felt-2);color:var(--ivory);font-family:"Fraunces",Georgia,serif}
+.app{height:100%;display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 18px}
+h1{margin:0;font-size:1.6rem;font-weight:900;letter-spacing:.01em}
+.levels{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.lvl{font:inherit;font-weight:700;font-size:1rem;padding:7px 16px;border:2px solid var(--gold);border-radius:8px;background:transparent;color:var(--gold);cursor:pointer}
+.lvl[aria-pressed="true"]{background:var(--gold);color:var(--ink)}
+.lvl:disabled{opacity:.4;cursor:not-allowed}
+.lvl[aria-pressed="true"]:disabled{opacity:1;cursor:default}
+.lvl:focus-visible,.card:focus-visible{outline:3px solid var(--ivory);outline-offset:3px}
+.stats{display:flex;gap:18px;margin:0;font-size:.95rem}
+.stats b{font-weight:900;font-variant-numeric:tabular-nums}
+.msgrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 14px;min-height:2.4em}
+#msg{margin:0;text-align:center;font-size:1.05rem}
+.new{font:inherit;font-weight:700;font-size:.95rem;padding:5px 14px;border:2px solid var(--ivory);border-radius:8px;background:var(--ivory);color:var(--ink);cursor:pointer}
+.new:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+[hidden]{display:none!important}
+main{flex:1;min-height:0;width:100%;container-type:size;display:grid;place-items:center}
+.board{display:grid;grid-template-columns:repeat(var(--n,4),1fr);grid-template-rows:repeat(var(--n,4),1fr);gap:clamp(3px,1.2cqmin,10px);width:min(100cqw,100cqh);aspect-ratio:1}
+.board:empty{display:none}
+.card{container-type:size;min-width:0;min-height:0;padding:0;border:0;background:none;cursor:pointer;perspective:700px;-webkit-tap-highlight-color:transparent}
+.inner{position:relative;display:block;width:100%;height:100%;transform-style:preserve-3d;transition:transform .35s}
+.card.up .inner{transform:rotateY(180deg)}
+.card.done{cursor:default}
+.face{position:absolute;inset:0;display:grid;place-items:center;border:max(2px,4cqmin) solid var(--ivory);border-radius:14cqmin;backface-visibility:hidden;-webkit-backface-visibility:hidden;box-shadow:0 2px 5px var(--shadow)}
+.back{background:repeating-linear-gradient(45deg,var(--back) 0 6px,var(--back-2) 6px 12px)}
+.front{transform:rotateY(180deg);background:var(--ivory);color:var(--ink);font-weight:900;font-size:56cqmin;line-height:1;font-variant-numeric:lining-nums}
+.front.two{font-size:42cqmin}
+.card.done .front{background:var(--match)}
+@media (prefers-reduced-motion:reduce){.inner{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Memory</h1>
+    <nav class="levels" aria-label="Nivel">
+      <button class="lvl" data-n="4" aria-pressed="false">4 × 4</button>
+      <button class="lvl" data-n="6" aria-pressed="false">6 × 6</button>
+      <button class="lvl" data-n="8" aria-pressed="false">8 × 8</button>
+      <button class="lvl" data-n="10" aria-pressed="false">10 × 10</button>
+    </nav>
+    <p class="stats">
+      <span>Movimientos <b id="moves">0</b></span>
+      <span>Parejas <b id="pairs">0/0</b></span>
+      <span>Tiempo <b id="time">0:00</b></span>
+    </p>
+  </header>
+  <div class="msgrow">
+    <p id="msg" role="status" aria-live="polite">Elige un nivel para empezar.</p>
+    <button class="new" id="newGame" hidden>Nuevo juego</button>
+  </div>
+  <main><div class="board" id="board"></div></main>
+</div>
+<script>
+const board=document.getElementById('board'),msg=document.getElementById('msg');
+const btns=[...document.querySelectorAll('.lvl')];
+let first=null,busy=false,found=0,pairs=0,moves=0,t0=0,timer=null;
+const fmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+const secs=()=>t0?Math.floor((Date.now()-t0)/1000):0;
+function stats(){
+  document.getElementById('moves').textContent=moves;
+  document.getElementById('pairs').textContent=found+'/'+pairs;
+  document.getElementById('time').textContent=fmt(secs());
+}
+function setLocked(v){btns.forEach(b=>b.disabled=v)}
+function start(n){
+  pairs=n*n/2;found=0;moves=0;first=null;busy=false;t0=0;clearInterval(timer);
+  btns.forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.n===n)));
+  setLocked(true);
+  const nums=[];for(let i=1;i<=pairs;i++)nums.push(i,i);
+  for(let i=nums.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[nums[i],nums[j]]=[nums[j],nums[i]]}
+  board.style.setProperty('--n',n);
+  board.innerHTML='';
+  nums.forEach(v=>{
+    const c=document.createElement('button');
+    c.className='card';c.dataset.v=v;
+    c.innerHTML='<span class="inner"><span class="face back"></span><span class="face front'+(v>9?' two':'')+'">'+v+'</span></span>';
+    board.appendChild(c);
+  });
+  stats();
+  msg.textContent='Encuentra las '+pairs+' parejas.';
+}
+function win(){
+  clearInterval(timer);stats();setLocked(false);
+  msg.textContent='¡Resuelto! '+pairs+' parejas en '+moves+' movimientos y '+fmt(secs())+'. Elige otro nivel arriba.';
+}
+const newBtn=document.getElementById('newGame');
+newBtn.addEventListener('click',()=>{
+  clearInterval(timer);board.innerHTML='';
+  first=null;busy=false;found=0;pairs=0;moves=0;t0=0;stats();
+  btns.forEach(b=>b.setAttribute('aria-pressed','false'));
+  setLocked(false);newBtn.hidden=true;
+  msg.textContent='Elige un nivel para empezar.';
+});
+btns.forEach(b=>b.addEventListener('click',()=>{start(+b.dataset.n);newBtn.hidden=false;}));
+board.addEventListener('click',e=>{
+  const c=e.target.closest('.card');
+  if(!c||busy||c.classList.contains('up'))return;
+  if(!t0){t0=Date.now();timer=setInterval(stats,500)}
+  c.classList.add('up');
+  if(!first){first=c;return}
+  moves++;
+  if(first.dataset.v===c.dataset.v){
+    first.classList.add('done');c.classList.add('done');first=null;found++;stats();
+    if(found===pairs)win();
+  }else{
+    busy=true;const a=first;first=null;stats();
+    setTimeout(()=>{a.classList.remove('up');c.classList.remove('up');busy=false},800);
+  }
+});
+</script>
+</body>
+</html>
