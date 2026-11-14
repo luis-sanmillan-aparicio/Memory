@@ -41,7 +41,11 @@ main{flex:1;min-height:0;width:100%;container-type:size;display:grid;place-items
 .front{transform:rotateY(180deg);background:var(--ivory);color:var(--ink);font-weight:900;font-size:56cqmin;line-height:1;font-variant-numeric:lining-nums}
 .front.two{font-size:42cqmin}
 .card.done .front{background:var(--match)}
-@media (prefers-reduced-motion:reduce){.inner{transition:none}}
+.card.up{cursor:default}
+.card.hint .back{border-color:var(--gold)}
+.card.hint{animation:latido 1.1s ease-in-out infinite}
+@keyframes latido{50%{transform:scale(1.07)}}
+@media (prefers-reduced-motion:reduce){.inner{transition:none}.card.hint{animation:none}}
 </style>
 </head>
 <body>
@@ -50,9 +54,9 @@ main{flex:1;min-height:0;width:100%;container-type:size;display:grid;place-items
     <h1>Memory</h1>
     <nav class="levels" aria-label="Nivel">
       <button class="lvl" data-n="4" aria-pressed="false">4 × 4</button>
+      <button class="lvl" data-n="5" aria-pressed="false">5 × 5</button>
       <button class="lvl" data-n="6" aria-pressed="false">6 × 6</button>
-      <button class="lvl" data-n="8" aria-pressed="false">8 × 8</button>
-      <button class="lvl" data-n="10" aria-pressed="false">10 × 10</button>
+      <button class="lvl" data-n="7" aria-pressed="false">7 × 7</button>
     </nav>
     <p class="stats">
       <span>Movimientos <b id="moves">0</b></span>
@@ -69,9 +73,9 @@ main{flex:1;min-height:0;width:100%;container-type:size;display:grid;place-items
 <script>
 const board=document.getElementById('board'),msg=document.getElementById('msg');
 const btns=[...document.querySelectorAll('.lvl')];
-let first=null,busy=false,found=0,pairs=0,moves=0,t0=0,timer=null;
+let first=null,busy=false,found=0,pairs=0,moves=0,t0=0,timer=null,endSecs=null;
 const fmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
-const secs=()=>t0?Math.floor((Date.now()-t0)/1000):0;
+const secs=()=>endSecs!==null?endSecs:(t0?Math.floor((Date.now()-t0)/1000):0);
 function stats(){
   document.getElementById('moves').textContent=moves;
   document.getElementById('pairs').textContent=found+'/'+pairs;
@@ -79,21 +83,30 @@ function stats(){
 }
 function setLocked(v){btns.forEach(b=>b.disabled=v)}
 function start(n){
-  pairs=n*n/2;found=0;moves=0;first=null;busy=false;t0=0;clearInterval(timer);
+  pairs=Math.floor(n*n/2);found=0;moves=0;first=null;busy=false;t0=0;endSecs=null;clearInterval(timer);
   btns.forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.n===n)));
   setLocked(true);
   const nums=[];for(let i=1;i<=pairs;i++)nums.push(i,i);
+  if(n*n%2)nums.push(0);
   for(let i=nums.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[nums[i],nums[j]]=[nums[j],nums[i]]}
   board.style.setProperty('--n',n);
   board.innerHTML='';
   nums.forEach(v=>{
     const c=document.createElement('button');
-    c.className='card';c.dataset.v=v;
-    c.innerHTML='<span class="inner"><span class="face back"></span><span class="face front'+(v>9?' two':'')+'">'+v+'</span></span>';
+    c.className='card'+(v?'':' blank');c.dataset.v=v;
+    c.innerHTML='<span class="inner"><span class="face back"></span><span class="face front'+(v>9?' two':'')+'">'+(v||'')+'</span></span>';
     board.appendChild(c);
   });
   stats();
-  msg.textContent='Encuentra las '+pairs+' parejas.';
+  msg.textContent='Encuentra las '+pairs+' parejas.'+(n*n%2?' Hay una carta en blanco.':'');
+}
+function finish(){
+  clearInterval(timer);endSecs=secs();stats();
+  const b=board.querySelector('.blank');
+  if(b&&!b.classList.contains('up')){
+    b.classList.add('hint');
+    msg.textContent='Toca la carta en blanco para terminar.';
+  }else win();
 }
 function win(){
   clearInterval(timer);stats();setLocked(false);
@@ -102,7 +115,7 @@ function win(){
 const newBtn=document.getElementById('newGame');
 newBtn.addEventListener('click',()=>{
   clearInterval(timer);board.innerHTML='';
-  first=null;busy=false;found=0;pairs=0;moves=0;t0=0;stats();
+  first=null;busy=false;found=0;pairs=0;moves=0;t0=0;endSecs=null;stats();
   btns.forEach(b=>b.setAttribute('aria-pressed','false'));
   setLocked(false);newBtn.hidden=true;
   msg.textContent='Elige un nivel para empezar.';
@@ -111,13 +124,21 @@ btns.forEach(b=>b.addEventListener('click',()=>{start(+b.dataset.n);newBtn.hidde
 board.addEventListener('click',e=>{
   const c=e.target.closest('.card');
   if(!c||busy||c.classList.contains('up'))return;
+  const blank=c.classList.contains('blank');
+  if(blank&&found===pairs){c.classList.remove('hint');c.classList.add('up','spent');win();return}
   if(!t0){t0=Date.now();timer=setInterval(stats,500)}
   c.classList.add('up');
+  if(blank){
+    c.classList.add('spent');moves++;
+    if(first){busy=true;const a=first;first=null;stats();setTimeout(()=>{a.classList.remove('up');busy=false},800)}
+    else stats();
+    return;
+  }
   if(!first){first=c;return}
   moves++;
   if(first.dataset.v===c.dataset.v){
     first.classList.add('done');c.classList.add('done');first=null;found++;stats();
-    if(found===pairs)win();
+    if(found===pairs)finish();
   }else{
     busy=true;const a=first;first=null;stats();
     setTimeout(()=>{a.classList.remove('up');c.classList.remove('up');busy=false},800);
