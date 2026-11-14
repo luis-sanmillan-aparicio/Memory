@@ -128,12 +128,6 @@ board.addEventListener('click',e=>{
   if(blank&&found===pairs){c.classList.remove('hint');c.classList.add('up','spent');win();return}
   if(!t0){t0=Date.now();timer=setInterval(stats,500)}
   c.classList.add('up');
-  if(blank){
-    c.classList.add('spent');moves++;
-    if(first){busy=true;const a=first;first=null;stats();setTimeout(()=>{a.classList.remove('up');busy=false},800)}
-    else stats();
-    return;
-  }
   if(!first){first=c;return}
   moves++;
   if(first.dataset.v===c.dataset.v){
